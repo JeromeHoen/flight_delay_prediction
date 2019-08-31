@@ -1,6 +1,7 @@
 pandas
 numpy
 scipy
+scikit-learn
 tensorflow
 keras
 holidays
