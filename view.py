@@ -56,6 +56,16 @@ dep_time_dict = {
     23: '2300-2359'
 }
 
+days_dict = {
+    1: 'Monday',
+    2: 'Tuesday',
+    3: 'Wednesday',
+    4: 'Thursday',
+    5: 'Friday',
+    6: 'Saturday',
+    7: 'Sunday'
+}   
+
 bins = [-np.inf, 1, 21, 61, 121, 181, np.inf]
 
 us_holidays = us_holidays = holidays.US()
@@ -78,7 +88,7 @@ with open(DIR + "OneHotEncoder.pkl", 'rb') as f:
     OHE = pickle.load(f)
 with open(DIR + "airports_dict.pkl", 'rb') as f:
     airports_dict = pickle.load(f)
-airports_dist = pd.read_csv(DIR + "airports_distances.csv", index_col=[0, 1])
+connections = pd.read_csv(DIR + "connections.csv", index_col=[0, 1])
 test_sample = pd.read_csv(DIR + "test_sample.csv")
 
 inv_airports_dict = dict(zip(airports_dict.values(), airports_dict.keys()))
@@ -151,9 +161,9 @@ def transform_date(date):
     date_time = datetime.datetime.strptime(date, '%Y-%m-%d')
     month = date_time.month
     if date_time in us_holidays:
-        day_of_week_h = "H"
+        day_of_week_h = "Holiday"
     else:
-        day_of_week_h = date_time.isoweekday()
+        day_of_week_h = days_dict[date_time.isoweekday()]
     return month, day_of_week_h
 
 def transform_inputs(
@@ -173,10 +183,12 @@ def transform_inputs(
     dep_hour = int(dep_time[:2])
     dep_time_blk = dep_time_dict[dep_hour]
 
-    distance = airports_dist.loc[(origin_id, dest_id)].values[0]
+    distance, median_route_time = connections.loc[(origin_id, dest_id)]
     duration = int(duration_hour) * 60 + int(duration_min)
+    
+    diff_from_median_route_time = duration - median_route_time
 
-    X = np.array([[distance, duration]])
+    X = np.array([[distance, diff_from_median_route_time]])
 
     month, day_of_week_h = transform_date(dep_date)
 
@@ -189,8 +201,7 @@ def transform_inputs(
         dep_time_blk
     ]], dtype=object)
 
-    X = scipy.sparse.hstack((X, OHE.transform(sample)))
-    X = scipy.sparse.csr_matrix(X)
+    X = scipy.sparse.hstack((X, OHE.transform(sample))).tocsr()
 
     return X
 
