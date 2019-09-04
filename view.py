@@ -69,7 +69,7 @@ DIR = ""
 def rmse(y_true, y_pred):
     return K.sqrt(K.mean(K.square(y_pred - y_true)))
 
-reg_model = load_model(DIR + "regresion_model.h5", custom_objects={'rmse': rmse})
+reg_model = load_model(DIR + "regression_model.h5", custom_objects={'rmse': rmse})
 classif_model = load_model(DIR + "classification_model.h5")
 
 graph = tf.get_default_graph()
