@@ -74,18 +74,20 @@ X_cat_cols = ['CARRIER', 'ORIGIN', 'DEST', 'MONTH', 'DAY_OF_WEEK_H', 'DEP_TIME_B
 
 # open files
 DIR = ""
-#DIR = "/home/JeromeHoen/flight_delay_prediction/"
 
 def rmse(y_true, y_pred):
     return K.sqrt(K.mean(K.square(y_pred - y_true)))
 
 reg_model = load_model(DIR + "regression_model.h5", custom_objects={'rmse': rmse})
 classif_model = load_model(DIR + "classification_model.h5")
+outlier_model = load_model(DIR + "outlier_model.h5")
 
 graph = tf.get_default_graph()
 
 with open(DIR + "OneHotEncoder.pkl", 'rb') as f:
     OHE = pickle.load(f)
+with open(DIR + "Scaler.pkl", 'rb') as f:
+    Scaler = pickle.load(f)
 with open(DIR + "airports_dict.pkl", 'rb') as f:
     airports_dict = pickle.load(f)
 connections = pd.read_csv(DIR + "connections.csv", index_col=[0, 1])
@@ -133,12 +135,15 @@ def get_results(
     
     with graph.as_default():
         reg = reg_model.predict(X)[0]
-        classes_proba = class_predict(X)[0]
+        outlier_pred = outlier_model.predict(X)[0]
+        outlier_proba = get_outlier_as_proba(outlier_pred)
+        classes_proba = class_predict(X, outlier_proba)[0]
         
     results = dict(
         reg = delay_to_message(reg) + ".",
         classes = {},
     )
+
     for i, pred in enumerate(classes_proba):
         results['classes'][str(i)] = f"{pred * 100:.1f}%"
 
@@ -188,7 +193,7 @@ def transform_inputs(
     
     diff_from_median_route_time = duration - median_route_time
 
-    X = np.array([[distance, diff_from_median_route_time]])
+    X = Scaler.transform([[distance, diff_from_median_route_time]])
 
     month, day_of_week_h = transform_date(dep_date)
 
@@ -201,16 +206,19 @@ def transform_inputs(
         dep_time_blk
     ]], dtype=object)
 
-    X = scipy.sparse.hstack((X, OHE.transform(sample))).tocsr()
+    X = scipy.sparse.hstack((X, OHE.transform(sample)))
 
-    return X
+    return X.tocsr()
 
 def class_predict(X, outliers_rate=0.023):
     classif_no_outliers = classif_model.predict(X)
     classif_no_outliers = classif_no_outliers * (1 - outliers_rate)
-    return np.hstack((classif_no_outliers, np.array([[outliers_rate]])))
+    return np.hstack((classif_no_outliers, np.array([outliers_rate])))
 
-
+def get_outlier_as_proba(pred_rate, base_rate=0.023):
+    min_pred = base_rate * 0.5
+    max_pred = base_rate * 1.5
+    return min_pred + pred_rate * (max_pred - min_pred)
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
